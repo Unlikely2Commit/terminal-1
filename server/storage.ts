@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type Message, type InsertMessage, type UserSettings, type InsertUserSettings, users, messages, userSettings } from "@shared/schema";
+import { type User, type InsertUser, type Message, type InsertMessage, type UserSettings, type InsertUserSettings, type Recording, type InsertRecording, users, messages, userSettings, recordings } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc } from "drizzle-orm";
 
@@ -15,6 +15,11 @@ export interface IStorage {
   // Settings operations
   getUserSettings(userId: string): Promise<UserSettings | undefined>;
   upsertUserSettings(settings: InsertUserSettings): Promise<UserSettings>;
+
+  // Recording operations
+  getRecordingsByClient(clientId: string): Promise<Recording[]>;
+  createRecording(recording: InsertRecording): Promise<Recording>;
+  updateRecordingStatus(id: string, status: string): Promise<Recording | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -75,6 +80,29 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return result;
+  }
+
+  // Recording operations
+  async getRecordingsByClient(clientId: string): Promise<Recording[]> {
+    return await db
+      .select()
+      .from(recordings)
+      .where(eq(recordings.clientId, clientId))
+      .orderBy(desc(recordings.uploadedAt));
+  }
+
+  async createRecording(recording: InsertRecording): Promise<Recording> {
+    const [newRecording] = await db.insert(recordings).values(recording).returning();
+    return newRecording;
+  }
+
+  async updateRecordingStatus(id: string, status: string): Promise<Recording | undefined> {
+    const [updated] = await db
+      .update(recordings)
+      .set({ status })
+      .where(eq(recordings.id, id))
+      .returning();
+    return updated;
   }
 }
 

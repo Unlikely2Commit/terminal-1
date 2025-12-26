@@ -40,3 +40,22 @@ export const userSettings = pgTable("user_settings", {
 export const insertUserSettingsSchema = createInsertSchema(userSettings).omit({ id: true, updatedAt: true });
 export type InsertUserSettings = z.infer<typeof insertUserSettingsSchema>;
 export type UserSettings = typeof userSettings.$inferSelect;
+
+// Client meeting recordings
+export const recordings = pgTable("recordings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id").notNull(),
+  meetingDate: text("meeting_date").notNull(),
+  meetingType: text("meeting_type").notNull(),
+  fileName: text("file_name").notNull(),
+  fileSize: integer("file_size").notNull(),
+  filePath: text("file_path"),
+  duration: text("duration"),
+  uploadedBy: varchar("uploaded_by").notNull(),
+  uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
+  status: text("status").notNull().default("processing"), // "processing", "ready", "error"
+});
+
+export const insertRecordingSchema = createInsertSchema(recordings).omit({ id: true, uploadedAt: true });
+export type InsertRecording = z.infer<typeof insertRecordingSchema>;
+export type Recording = typeof recordings.$inferSelect;

@@ -25,7 +25,10 @@ import {
   ListChecks,
   History,
   ArrowRight,
-  ClipboardCheck
+  ClipboardCheck,
+  Upload,
+  File,
+  Loader2
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,6 +43,9 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // --- Mock Data ---
 
@@ -163,6 +169,14 @@ export default function ClientsPage() {
   const [updatesApplied, setUpdatesApplied] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   
+  // State for recording upload
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadMeetingType, setUploadMeetingType] = useState("Annual Review");
+  const [uploadMeetingDate, setUploadMeetingDate] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   // Mock filtering
   const filteredClients = CLIENTS.filter(c => 
     c.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -221,6 +235,57 @@ export default function ClientsPage() {
           }
           return u;
       }));
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setUploadFile(file);
+    }
+  };
+
+  const handleUploadRecording = async () => {
+    if (!uploadFile || !selectedClientId || !uploadMeetingDate) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+    
+    setIsUploading(true);
+    
+    try {
+      const formData = new FormData();
+      formData.append("file", uploadFile);
+      formData.append("clientId", selectedClientId);
+      formData.append("meetingDate", uploadMeetingDate);
+      formData.append("meetingType", uploadMeetingType);
+      
+      const response = await fetch("/api/recordings", {
+        method: "POST",
+        body: formData,
+      });
+      
+      if (!response.ok) throw new Error("Upload failed");
+      
+      toast.success("Recording uploaded", {
+        description: "Processing will complete shortly.",
+        className: "bg-card border-primary/20",
+      });
+      
+      setUploadDialogOpen(false);
+      setUploadFile(null);
+      setUploadMeetingDate("");
+      setUploadMeetingType("Annual Review");
+    } catch (error) {
+      toast.error("Failed to upload recording");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
   };
 
   const selectedClient = selectedClientId === "1" ? JANE_PROFILE_BASE : null;
@@ -652,6 +717,124 @@ export default function ClientsPage() {
                              </CardTitle>
                              <div className="flex items-center gap-2">
                                 <Badge variant="outline" className="cursor-pointer hover:bg-muted/50">All Types</Badge>
+                                <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+                                  <DialogTrigger asChild>
+                                    <Button 
+                                      size="sm" 
+                                      className="h-7 gap-1.5 text-xs"
+                                      data-testid="button-upload-recording"
+                                    >
+                                      <Upload className="w-3.5 h-3.5" />
+                                      Upload Recording
+                                    </Button>
+                                  </DialogTrigger>
+                                  <DialogContent className="sm:max-w-md">
+                                    <DialogHeader>
+                                      <DialogTitle>Upload Meeting Recording</DialogTitle>
+                                      <DialogDescription>
+                                        Upload an audio or video recording to process and transcribe.
+                                      </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="space-y-4 py-4">
+                                      <div className="space-y-2">
+                                        <Label htmlFor="meeting-date">Meeting Date</Label>
+                                        <Input
+                                          id="meeting-date"
+                                          type="date"
+                                          value={uploadMeetingDate}
+                                          onChange={(e) => setUploadMeetingDate(e.target.value)}
+                                          className="bg-muted/30"
+                                          data-testid="input-meeting-date"
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label>Meeting Type</Label>
+                                        <Select value={uploadMeetingType} onValueChange={setUploadMeetingType}>
+                                          <SelectTrigger data-testid="select-meeting-type">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="Annual Review">Annual Review</SelectItem>
+                                            <SelectItem value="Fact-find">Fact-find</SelectItem>
+                                            <SelectItem value="Review">Review</SelectItem>
+                                            <SelectItem value="Initial Consultation">Initial Consultation</SelectItem>
+                                            <SelectItem value="Follow-up">Follow-up</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label>Recording File</Label>
+                                        <input
+                                          ref={fileInputRef}
+                                          type="file"
+                                          accept="audio/*,video/*,.mp3,.mp4,.m4a,.wav,.webm"
+                                          onChange={handleFileSelect}
+                                          className="hidden"
+                                          data-testid="input-file-recording"
+                                        />
+                                        {!uploadFile ? (
+                                          <div
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="border-2 border-dashed border-border/60 rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/20 transition-colors"
+                                          >
+                                            <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+                                            <p className="text-sm text-muted-foreground">
+                                              Click to select a recording file
+                                            </p>
+                                            <p className="text-xs text-muted-foreground/60 mt-1">
+                                              MP3, MP4, M4A, WAV, or WebM
+                                            </p>
+                                          </div>
+                                        ) : (
+                                          <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg border border-border/50">
+                                            <div className="flex items-center gap-3">
+                                              <div className="p-2 bg-primary/10 rounded">
+                                                <File className="w-4 h-4 text-primary" />
+                                              </div>
+                                              <div>
+                                                <p className="text-sm font-medium truncate max-w-[200px]">{uploadFile.name}</p>
+                                                <p className="text-xs text-muted-foreground">{formatFileSize(uploadFile.size)}</p>
+                                              </div>
+                                            </div>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-8 w-8 p-0"
+                                              onClick={() => setUploadFile(null)}
+                                            >
+                                              <X className="w-4 h-4" />
+                                            </Button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <DialogFooter>
+                                      <Button
+                                        variant="outline"
+                                        onClick={() => setUploadDialogOpen(false)}
+                                      >
+                                        Cancel
+                                      </Button>
+                                      <Button
+                                        onClick={handleUploadRecording}
+                                        disabled={!uploadFile || !uploadMeetingDate || isUploading}
+                                        data-testid="button-confirm-upload"
+                                      >
+                                        {isUploading ? (
+                                          <>
+                                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                            Uploading...
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Upload className="w-4 h-4 mr-2" />
+                                            Upload
+                                          </>
+                                        )}
+                                      </Button>
+                                    </DialogFooter>
+                                  </DialogContent>
+                                </Dialog>
                              </div>
                           </CardHeader>
                           <CardContent className="p-0">
